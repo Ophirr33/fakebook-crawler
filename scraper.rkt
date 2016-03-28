@@ -17,8 +17,10 @@
   (display (format "GET ~a HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nCookie: ~a; ~a\r\nConnection: Close\r\n\r\n"
                    file-path session csrf) out)
   (flush-output out)
-  (close-output-port out)
-  (port->string in))
+  (let ([result (port->string in)])
+    (close-output-port out)
+    (close-input-port in)
+    result))
 
 ; sends a post for the given filepath
 (define (post file-path)
@@ -28,8 +30,10 @@
     (display (format "POST ~a HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nCookie: ~a; ~a\r\nContent-Length: ~a\r\nConnection: Close\r\n\r\n~a\r\n\r\n"
                      file-path session csrf (string-length creds) creds) out)
     (flush-output out)
-    (close-output-port out)
-    (port->string in)))
+    (let ([result (port->string in)])
+      (close-output-port out)
+      (close-input-port in)
+      result)))
 
 ; sets the cookies
 (define (set-cookie response)
@@ -93,14 +97,14 @@
     (set! username (vector-ref cmd-args 0))
     (set! password (vector-ref cmd-args 1))
     (async-channel-put todo (cdr (login)))
-    (build-list 8 (λ (x) (thread thread-action)))
-    (thread-action)
-    (print-list flags)
-    (exit)))
+    (build-list 4 (λ (x) (thread thread-action)))
+    (thread-action)))
 
 ; main action performed by a single thread
 (define (thread-action)
-  (if (= (set-count flags) 5) flags
+  (if (= (set-count flags) 5)
+      (begin (print-list flags)
+             (exit))
       (let ([url (async-channel-get todo)])
         (if (set-member? visited url) (thread-action)
             (begin (set! visited (set-add visited url))
@@ -114,7 +118,7 @@
          [body (cdr response)])
     (cond [(= 200 code)
            (let ([parsed-flags (parse-flags body)])
-             (unless (null? parsed-flags) (printf "~a\n" (car parsed-flags)))
+             ;(unless (null? parsed-flags) (printf "~a\n" (car parsed-flags)))
              (set! flags (set-union (list->set parsed-flags) flags))
              (for ([l (parse-links body)]) (async-channel-put todo l)))]
           [(or (= 301 code) (= 302 code))
