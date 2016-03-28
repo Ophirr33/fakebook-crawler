@@ -69,7 +69,7 @@
 ; prints the given list
 (define (print-list l)
   (for ([x l])
-    (println x)))
+    (printf "~a\n" x)))
 
 ; LOGGING IN
 (define (login)
@@ -112,7 +112,7 @@
          [body (cdr response)])
     (cond [(= 200 code)
            (let ([parsed-flags (parse-flags body)])
-             (unless (null? parsed-flags) (println (car parsed-flags)))
+             (unless (null? parsed-flags) (printf "~a\n" (car parsed-flags)))
              (set! flags (set-union (list->set parsed-flags) flags))
              (for ([l (parse-links body)]) (async-channel-put todo l)))]
           [(or (= 301 code) (= 302 code))
