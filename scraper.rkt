@@ -17,6 +17,7 @@
   (display (format "GET ~a HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nCookie: ~a; ~a\r\nConnection: Close\r\n\r\n"
                    file-path session csrf) out)
   (flush-output out)
+  (close-output-port out)
   (port->string in))
 
 ; sends a post for the given filepath
@@ -27,6 +28,7 @@
     (display (format "POST ~a HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nCookie: ~a; ~a\r\nContent-Length: ~a\r\nConnection: Close\r\n\r\n~a\r\n\r\n"
                      file-path session csrf (string-length creds) creds) out)
     (flush-output out)
+    (close-output-port out)
     (port->string in)))
 
 ; sets the cookies
