@@ -1,6 +1,15 @@
-#lang racket
+#lang racket/base
+(require racket/port)
+(require racket/string)
+(require racket/set)
 (require racket/tcp)
 (require racket/async-channel)
+
+; gets the last element in a list
+(define (last l)
+  (cond [(null? l) (error 'last "no last of empty list")]
+        [(null? (cdr l)) (car l)]
+        [else (last (cdr l))]))
 
 ; sends a get request for the given filepath
 (define (get file-path)
@@ -27,7 +36,7 @@
   (set! csrf (grab-response (regexp-match #rx"csrftoken=[^;]+" response) csrf))
   (set! session (grab-response (regexp-match #rx"sessionid=[^;]+" response) session)))
 
-; Parse the response and return a pair of the code and 
+; parses the response and returns a pair of the code and 
 (define (parse-response response)
   (when (not (regexp-match? #rx"^HTTP/1.1" response))
     (error "got a non HTTP/1.1 response"))
@@ -44,7 +53,7 @@
               [(or (= code 403) (= code 404) (= code 504) (= code 500)) #f]
               [else response])))
 
-; Grabs all the hyperlinks out of the html, and filters them
+; grabs all the hyperlinks out of the html, and filters them
 ; to only be fakebook links
 (define (parse-links html)
   (filter (λ (x) (or (string=? "/" (substring x 0 1))
@@ -53,37 +62,41 @@
           (map (λ (x) (substring x 9))
                (regexp-match* #rx"<a href=\"[^\"]+" html))))
 
-; Grabs all the secret flags out of the html
+; grabs all the secret flags out of the html
 (define (parse-flags html)
   (map (λ (x) (substring x 6)) (regexp-match* #rx"FLAG: [^<]+" html)))
 
-; Prints the given list
+; prints the given list
 (define (print-list l)
   (for ([x l])
     (println x)))
 
-;; LOGGING IN
+; LOGGING IN
 (define (login)
   (parse-response (get "/accounts/login/?next=/fakebook/"))
   (parse-response (post "/accounts/login/?next=/fakebook/")))
 
-;; Book keeping
+; BOOK-KEEPING
 (define csrf #f)
 (define session #f)
-(define username "001719068")
-(define password "3U4A57BB")
+(define username "")
+(define password "")
 (define visited (set))
 (define flags (set))
 (define todo (make-async-channel))
 
-(define main-thread
-  (thread (λ () (async-channel-put todo (cdr (login)))
-                (build-list 8 (λ (x) (thread thread-action)))
-                (thread-action)
-                (print-list flags)
-                (kill-thread main-thread))))
+; main: sets up the starting todo list and starts all threads
+(define (main)
+  (let ([cmd-args (current-command-line-arguments)])
+    (set! username (vector-ref cmd-args 0))
+    (set! password (vector-ref cmd-args 1))
+    (async-channel-put todo (cdr (login)))
+    (build-list 8 (λ (x) (thread thread-action)))
+    (thread-action)
+    (print-list flags)
+    (exit)))
 
-;; main action performed by a single thread
+; main action performed by a single thread
 (define (thread-action)
   (if (= (set-count flags) 5) flags
       (let ([url (async-channel-get todo)])
@@ -92,15 +105,16 @@
                    (crawl url)
                    (thread-action))))))
 
-;; Crawls a single webpage
+; crawls a single webpage
 (define (crawl url)
   (let* ([response (parse-response (get url))]
          [code (car  response)]
          [body (cdr response)])
-    ;(displayln (format "url: ~a flags: ~a code: ~a" url flags code))
     (cond [(= 200 code)
-           (set! flags (set-union (list->set (parse-flags body)) flags))
-           (for ([l (parse-links body)]) (async-channel-put todo l))]
+           (let ([parsed-flags (parse-flags body)])
+             (unless (null? parsed-flags) (println (car parsed-flags)))
+             (set! flags (set-union (list->set parsed-flags) flags))
+             (for ([l (parse-links body)]) (async-channel-put todo l)))]
           [(or (= 301 code) (= 302 code))
            (set! todo (cons body todo))]
           [(and (>= 500 code) (< code 600))
@@ -120,3 +134,5 @@ Ty's flags:
  "6869c3e2628a417d9fa24775e2171d5c24a5c5fe499c9d22b41455251109bd04"
  "9259a92dcd58eafd9c0d0000c5874c6e06e1fbfc0066d3a6284c83839a6b117d"
 |#
+
+(main)
