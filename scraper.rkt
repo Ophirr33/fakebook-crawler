@@ -1,3 +1,4 @@
+#!/usr/bin/racket
 #lang racket/base
 (require racket/port)
 (require racket/string)
