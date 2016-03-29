@@ -90,6 +90,8 @@
 (define visited (set))
 (define flags (set))
 (define todo (make-async-channel))
+(define flag-sem (make-semaphore 1))
+(define visited-sem (make-semaphore 1))
 
 ; main: sets up the starting todo list and starts all threads
 (define (main)
@@ -107,7 +109,9 @@
              (exit))
       (let ([url (async-channel-get todo)])
         (if (set-member? visited url) (thread-action)
-            (begin (set! visited (set-add visited url))
+            (begin (semaphore-wait visited-sem)
+                   (set! visited (set-add visited url))
+                   (semaphore-post visited-sem)
                    (crawl url)
                    (thread-action))))))
 
@@ -119,7 +123,9 @@
     (cond [(= 200 code)
            (let ([parsed-flags (parse-flags body)])
              ;(unless (null? parsed-flags) (printf "~a\n" (car parsed-flags)))
-             (set! flags (set-union (list->set parsed-flags) flags))
+             (begin (semaphore-wait flag-sem)
+                    (set! flags (set-union (list->set parsed-flags) flags))
+                    (semaphore-post flag-sem))
              (for ([l (parse-links body)]) (async-channel-put todo l)))]
           [(or (= 301 code) (= 302 code))
            (set! todo (cons body todo))]
